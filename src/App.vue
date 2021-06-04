@@ -1,6 +1,32 @@
 <template>
   <div id="app">
+    <div>
+      <a-input
+        style="width: 200px; margin-right: 10px"
+        placeholder="请输入OBJECTID"
+        v-model="objectId"
+      />
+      <a-button @click="search">查询</a-button>
+    </div>
+    <!-- <a-button></a-button> -->
     <div id="viewDiv"></div>
+    <div id="toolbarDiv">
+      <div class="esri-widget esri-widget--button esri-component">
+        <!-- <label>（上传压缩的shapefile文件，格式.zip）</label> -->
+        <a-upload
+          :file-list="fileList"
+          :before-upload="beforeUpload"
+          accept=".zip"
+        >
+          <a-tooltip
+            placement="right"
+            title="上传压缩的shapefile文件，格式.zip"
+          >
+            <a-button> <a-icon type="upload" /> </a-button>
+          </a-tooltip>
+        </a-upload>
+      </div>
+    </div>
     <a-modal
       title="备注"
       v-model="remarkVisible"
@@ -11,12 +37,39 @@
     >
       <a-input v-model="remarkForm.name" placeholder="备注信息"></a-input>
     </a-modal>
+    <!-- <draggable> -->
+    <!-- <a-modal :visible="formVisible" v-drag :title="null">
+      <h2 class="title" v-dragHandle>modal标题</h2>
+      <label>文本信息</label>
+      <a-input placeholder="请输入文本信息"></a-input>
+    </a-modal> -->
+    <drag-modal :visible="dragModalVisible" title="信息录入">
+      <div slot="content">
+        <custom-form
+          :formArr="formArr"
+          @submit="ok"
+          @error="error"
+          :actionShow="true"
+        ></custom-form>
+      </div>
+    </drag-modal>
+    <!-- </draggable> -->
   </div>
 </template>
 
 <script>
 import { importEsri } from "@/components/arcgis/common.js";
+// import draggable from "vuedraggable";
+import DragModal from "@/components/modal/dragModal.vue";
+import CustomForm from "@/components/CustomForm.vue";
+import { ArcgisMixin } from "./mixins/mixin";
 export default {
+  mixins: [ArcgisMixin],
+  components: {
+    // draggable,
+    DragModal,
+    CustomForm,
+  },
   name: "App",
   data() {
     return {
@@ -26,6 +79,7 @@ export default {
       remarkVisible: false,
       geometry: null,
       symbol: null,
+      objectId: 17213,
       highlight: null,
       editFeature: null, //编辑的要素
       remarkForm: {
@@ -34,12 +88,46 @@ export default {
         creater: "test",
       },
       featureRemark: null,
+      // formVisible: true,
+      dragModalVisible: false,
+      fileList: null,
+      graphicsLayer: null,
+      formArr: [
+        {
+          label: "文字信息",
+          type: "input",
+          key: "TEXT",
+          value: null,
+          required: true,
+          errMsg: "请输入",
+          disabled: false,
+        },
+        {
+          label: "编号",
+          type: "input",
+          key: "BH",
+          value: null,
+          required: true,
+          errMsg: "请输入",
+          disabled: false,
+        },
+        {
+          label: "面积",
+          type: "input",
+          key: "MJ",
+          value: null,
+          required: true,
+          errMsg: "请输入",
+          disabled: false,
+        },
+      ],
     };
   },
   methods: {
     loadEsri(esri) {
       let baseLayer = new esri.TileLayer({
-        url: "http://localhost:6080/arcgis/rest/services/local/local/MapServer",
+        url:
+          "http://localhost:6080/arcgis/rest/services/ncx/NcxBaseMap/MapServer",
       });
       const baseMap = new esri.Basemap({
         baseLayers: [baseLayer],
@@ -47,6 +135,7 @@ export default {
         title: "custom basemap",
       });
       this.map = new esri.Map({ basemap: baseMap });
+
       this.view = new esri.MapView({
         container: "viewDiv",
         map: this.map,
@@ -61,16 +150,35 @@ export default {
           },
         },
       });
+      this.view.ui.add("toolbarDiv", "top-right");
       this.esri = esri;
       const featureLayerRemark = new esri.FeatureLayer({
         url: window.setting.remarkLayer,
         popupTemplate: this.setPopTemplate(),
         id: "remarkLayer",
       });
-
+      let featureLayerZRZ = new esri.FeatureLayer({
+        url: window.setting.featureLayerZRZ,
+      });
+      let featureLayerJSYDSYQ = new esri.FeatureLayer({
+        url: window.setting.featureLayerJSYDSYQ,
+      });
+      // this.searchFeature = this.featureLayer2;
+      let featureLayerDJZQ = new esri.FeatureLayer({
+        url: window.setting.featureLayerDJZQ,
+        // popupEnabled: false,
+      });
+      this.featureArea = new esri.FeatureLayer({
+        url: window.setting.areaLayer,
+      });
+      this.map.add(featureLayerZRZ);
+      this.map.add(featureLayerJSYDSYQ);
+      this.map.add(featureLayerDJZQ);
       this.featureRemark = featureLayerRemark;
+      this.map.add(this.featureArea);
       this.map.add(featureLayerRemark);
-
+      this.graphicsLayer = new esri.GraphicsLayer();
+      this.map.add(this.graphicsLayer);
       this.view.on("click", (e) => {
         // 右键
         if (e.native.which === 3) {
@@ -159,6 +267,59 @@ export default {
         ],
       };
       return popupTemplate;
+    },
+    search() {
+      let that = this;
+      if (!this.objectId) {
+        this.$message.warning("请输入OBJECTID");
+        return;
+      } else {
+        let params = {
+          表达式: "OBJECTID=" + this.objectId,
+        };
+        let geoprocessor = new this.esri.Geoprocessor({
+          url:
+            "http://localhost:6080/arcgis/rest/services/TEST/GPServer/TestClipZRZ",
+        });
+        geoprocessor.submitJob(params).then((jobInfo) => {
+          var jobid = jobInfo.jobId;
+          console.log("submitJob", jobInfo);
+          var options = {
+            interval: 1500,
+            statusCallback: function (j) {
+              console.log("Job Status: ", j.jobStatus);
+            },
+          };
+          var fillSymbol = {
+            type: "simple-fill", // autocasts as new SimpleFillSymbol()
+            color: [1, 2, 224, 0.75],
+            outline: {
+              // autocasts as new SimpleLineSymbol()
+              color: [255, 255, 159],
+              width: 1,
+            },
+          };
+          geoprocessor.waitForJobCompletion(jobid, options).then((info) => {
+            if (info.jobStatus === "job-succeeded") {
+              geoprocessor
+                .getResultData(info.jobId, "ZDJBXX_Intersect", that.getResult)
+                .then((result) => {
+                  console.log(result, "result");
+                  let features = result.value.features;
+                  let graphics = features.map((feature) => {
+                    feature.symbol = fillSymbol;
+                    return feature;
+                  });
+                  that.graphicsLayer.addMany(graphics);
+                  console.log("getResult", result);
+                });
+            }
+          });
+        });
+      }
+    },
+    getResult(result) {
+      console.log(result, "result");
     },
     handleOk() {
       // let that = this;
@@ -285,6 +446,9 @@ export default {
       }
     },
     handleCancle() {},
+    error() {
+      this.dragModalVisible = false;
+    },
   },
   mounted() {
     const esri = this.$store.state.app.esri;

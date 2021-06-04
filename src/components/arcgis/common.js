@@ -37,7 +37,9 @@ export function importEsri (cb) {
             "esri/widgets/DistanceMeasurement2D",
             "esri/widgets/AreaMeasurement2D",
             "esri/layers/ImageryTileLayer",
-            "esri/PopupTemplate"
+            "esri/PopupTemplate",
+            "esri/tasks/Geoprocessor",
+            "esri/layers/GraphicsLayer"
         ])
         .then(
             ([
@@ -70,7 +72,9 @@ export function importEsri (cb) {
                 DistanceMeasurement2D,
                 AreaMeasurement2D,
                 ImageryTileLayer,
-                PopupTemplate
+                PopupTemplate,
+                Geoprocessor,
+                GraphicsLayer
             ]) => {
                 esriConfig.fontsUrl = window.setting.esriFont;
                 const esri = {
@@ -103,7 +107,9 @@ export function importEsri (cb) {
                     DistanceMeasurement2D: DistanceMeasurement2D,
                     AreaMeasurement2D: AreaMeasurement2D,
                     ImageryTileLayer: ImageryTileLayer,
-                    PopupTemplate: PopupTemplate
+                    PopupTemplate: PopupTemplate,
+                    Geoprocessor: Geoprocessor,
+                    GraphicsLayer: GraphicsLayer
                 };
                 store.dispatch("InitEsriMap", esri);
                 cb(esri);
